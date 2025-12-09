@@ -1,7 +1,7 @@
 # Vending_Machine_Prism_Model_Checker
 Vending Machine Controller Model 
 
-Authors: Ghokkul Muhunthan (19079077), Simarpreet Singh (21153978)
+Authors:Simarpreet Singh
 
 This repository contains a PRISM model of a vending machine controller designed for the ENSE803 assignment. The model captures drink selection, payment processing, inventory management, and error handling using formal methods.
 
