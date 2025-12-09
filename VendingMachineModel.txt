@@ -1,0 +1,129 @@
+// Vending Machine Controller Model for ENSE803 Assignment
+
+
+
+module DrinkSelection
+
+    // Drink selection state:
+    // 0 = no selection, 1=Kiwi-Cola, 2=Bolt, 3=Clear Water, 4=maintenance mode
+    selection : [0..4] init 0;
+
+    // Drink quantities
+    kiwi_qty : [0..10] init 3;
+    bolt_qty : [0..10] init 3;
+    water_qty : [0..10] init 3;
+
+    // Payment due flag
+    payment_due : bool init false;
+
+    // Select Kiwi-Cola if available
+    [select_kiwi] (selection = 0) & (kiwi_qty > 0) & (selection != 4) -> 
+        (selection' = 1) & (payment_due' = true);
+
+    // Select Bolt Energy Drink if available
+    [select_bolt] (selection = 0) & (bolt_qty > 0) & (selection != 4) -> 
+        (selection' = 2) & (payment_due' = true);
+
+    // Select Clear Water if available
+    [select_water] (selection = 0) & (water_qty > 0) & (selection != 4) -> 
+        (selection' = 3) & (payment_due' = true);
+
+    // Change selection before payment
+    [change_to_kiwi] (selection != 0) & (selection != 4) & (kiwi_qty > 0) -> 
+        (selection' = 1) & (payment_due' = true);
+
+    [change_to_bolt] (selection != 0) & (selection != 4) & (bolt_qty > 0) -> 
+        (selection' = 2) & (payment_due' = true);
+
+    [change_to_water] (selection != 0) & (selection != 4) & (water_qty > 0) -> 
+        (selection' = 3) & (payment_due' = true);
+
+    // Cancel selection (back to no selection, no payment due)
+    [cancel_selection] (selection != 0) & (selection != 4) -> 
+        (selection' = 0) & (payment_due' = false);
+
+    // If all drinks are zero, go to maintenance mode permanently
+    [enter_maintenance] (kiwi_qty = 0) & (bolt_qty = 0) & (water_qty = 0) -> 
+        (selection' = 4);
+
+    // After payment success, decrement drink qty and reset selection/payment
+    [payment_success] (selection = 1) & (payment_due = true) & (kiwi_qty > 0) -> 
+        (kiwi_qty' = kiwi_qty - 1) & (selection' = 0) & (payment_due' = false);
+
+    [payment_success] (selection = 2) & (payment_due = true) & (bolt_qty > 0) -> 
+        (bolt_qty' = bolt_qty - 1) & (selection' = 0) & (payment_due' = false);
+
+    [payment_success] (selection = 3) & (payment_due = true) & (water_qty > 0) -> 
+        (water_qty' = water_qty - 1) & (selection' = 0) & (payment_due' = false);
+
+endmodule
+
+//--------------------------------------------
+
+module EFPOSPayment
+
+    // Payment states:
+    // 0 = no payment started
+    // 1 = payment in progress (waiting PIN)
+    // 2 = payment success
+    // 3 = payment cancelled (wrong PIN)
+    // 4 = error occurred
+    payment_state : [0..4] init 0;
+
+    // Start payment only if payment is due and not in maintenance mode
+    [start_payment] (payment_state = 0) & (payment_due = true) & (selection != 4) -> 
+        (payment_state' = 1);
+
+    // Correct PIN entered, payment success
+    [enter_correct_pin] (payment_state = 1) -> 
+        (payment_state' = 2);
+
+    // Incorrect PIN entered, cancel payment, reset to no payment
+    [enter_wrong_pin] (payment_state = 1) -> 
+        (payment_state' = 3);
+
+    // Cancel payment resets to no payment and resets drink selection/payment_due
+    [cancel_payment] (payment_state = 3) -> 
+        (payment_state' = 0);
+
+    // On payment success, reset payment_state after notifying other modules
+    [payment_success] (payment_state = 2) -> 
+        (payment_state' = 0);
+
+    // Error condition can occur anytime except in maintenance
+    [error] (payment_state != 4) & (selection != 4) -> 
+        (payment_state' = 4);
+
+    // If error occurs, the machine goes to maintenance (synchronization)
+    [enter_maintenance] (payment_state = 4) -> 
+        (payment_state' = 4);
+
+endmodule
+
+//--------------------------------------------
+
+module DrinkDispenser
+
+    // Boolean flag indicating if drink is currently dispensing
+    dispensing : bool init false;
+
+    // Dispense drink only after payment success (sync on payment_success)
+    [payment_success] (dispensing = false) -> 
+        (dispensing' = true);
+
+    // Dispensing completes (reset flag)
+    [dispense_complete] (dispensing = true) -> 
+        (dispensing' = false);
+
+endmodule
+
+//--------------------------------------------
+
+// Labels for model checking
+
+label "in_maintenance"     = selection = 4;
+label "drink_dispensed"    = dispensing = true;
+label "pay"                = payment_state = 1;
+label "error_occurred"     = payment_state = 4;
+label "soda_empty"         = (selection = 0) & ((kiwi_qty = 0) & (bolt_qty = 0) & (water_qty = 0));
+label "soda_not_selected"  = selection = 0;
